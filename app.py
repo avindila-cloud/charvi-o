@@ -545,11 +545,17 @@ def main():
         st.title("Satu Langkah Lagi!")
         st.write("Bagikan Charvi O ke teman Anda untuk mengaktifkan akses gratis 24 jam.")
 
-        # Tombol Share WA
-        share_text = "Coba Charvi O! Penerjemah Kantonis gratis."
+        share_text = "Coba Charvi O! Penerjemah Kantonis gratis untuk TKW."
         wa_url = f"https://wa.me/?text={urllib.parse.quote(share_text)}"
 
-        if st.button("📤 Bagikan ke WhatsApp", type="primary", use_container_width=True):
+        # Tombol 1: Membuka WhatsApp (Link Button tidak diblokir popup blocker)
+        st.link_button("📤 1. Bagikan ke WhatsApp", wa_url, type="primary", use_container_width=True)
+
+        st.divider()
+
+        # Tombol 2: Konfirmasi sudah share
+        st.write("Sudah membagikannya ke teman? Klik tombol di bawah ini untuk mengaktifkan trial:")
+        if st.button("✅ 2. Saya Sudah Share, Aktifkan Trial", type="primary", use_container_width=True):
             mark_shared(device_id)
             start_trial(device_id)  # Mulai hitungan 24 jam
             st.rerun()  # Refresh halaman, status akan berubah jadi "trial"
