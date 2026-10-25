@@ -540,6 +540,11 @@ def main():
     access = get_user_status(device_id)
     status = access["status"]
 
+    # Tampilkan notifikasi saat trial sudah aktif
+    if st.session_state.get("show_trial_toast", False):
+        st.toast("🎉 Akses gratis 24 jam Anda sudah aktif!", icon="✅")
+        st.session_state.show_trial_toast = False
+
     # Jika user baru (belum pernah share/trial)
     if status == "new":
         st.title("Satu Langkah Lagi!")
@@ -548,17 +553,22 @@ def main():
         share_text = "Coba Charvi O! Penerjemah Kantonis gratis untuk TKW."
         wa_url = f"https://wa.me/?text={urllib.parse.quote(share_text)}"
 
-        # Tombol 1: Membuka WhatsApp (Link Button tidak diblokir popup blocker)
-        st.link_button("📤 1. Bagikan ke WhatsApp", wa_url, type="primary", use_container_width=True)
-
-        st.divider()
-
-        # Tombol 2: Konfirmasi sudah share
-        st.write("Sudah membagikannya ke teman? Klik tombol di bawah ini untuk mengaktifkan trial:")
-        if st.button("✅ 2. Saya Sudah Share, Aktifkan Trial", type="primary", use_container_width=True):
+        # Satu Tombol untuk Share & Aktivasi
+        if st.button("📤 Bagikan ke WhatsApp & Aktifkan Trial", type="primary", use_container_width=True):
+            # 1. Proses aktivasi di database
             mark_shared(device_id)
-            start_trial(device_id)  # Mulai hitungan 24 jam
-            st.rerun()  # Refresh halaman, status akan berubah jadi "trial"
+            start_trial(device_id)
+
+            # 2. Set flag untuk menampilkan notifikasi setelah rerun
+            st.session_state.show_trial_toast = True
+
+            # 3. Buka WhatsApp menggunakan JavaScript
+            import streamlit.components.v1 as components
+            components.html(f"<script>window.open('{wa_url}', '_blank');</script>", height=0)
+
+            # 4. Refresh halaman agar status berubah jadi 'trial'
+            st.rerun()
+
         st.stop()
 
     # Jika sedang trial
