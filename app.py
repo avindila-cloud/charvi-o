@@ -1,6 +1,7 @@
 # ============================================================
 # SECTION 1: IMPORTS & SETUP
 # ============================================================
+import urllib.parse
 import os
 import uuid
 from datetime import datetime, timedelta
@@ -512,110 +513,53 @@ def render_admin_page() -> None:
 # ============================================================
 # SECTION 11: ROUTER
 # ============================================================
-def main() -> None:
-    st.set_page_config(page_title="Charvi O", layout="wide", page_icon="🎙️")
-    # DEBUG: Cek parameter yang masuk dari PWA
-    st.sidebar.write("=== DEBUG INFO ===")
-    st.sidebar.write(f"Query Params: {dict(st.query_params)}")
-    st.sidebar.write(f"Device ID: {get_device_id()}")
-    st.sidebar.write(f"Status: {get_status()}")
-    _handle_payment_return()
+def main():
+    st.set_page_config(page_title="Charvi O", layout="wide")
 
-    # Manual refresh button: jika layar macet, paksa Streamlit membaca ulang database
-    if st.button("🔄 Refresh Status", type="secondary", use_container_width=True):
-        st.rerun()
-
-    # DAPETKAN FLAGA shared dari PWA (query param) supaya sync dengan state Supabase
-    qp = st.query_params
-    shared_flag = qp.get("shared", "")
-    if isinstance(shared_flag, list):
-        shared_flag = shared_flag[0] if shared_flag else ""
-    has_shared_flag = shared_flag.lower() in ("1", "true", "yes")
-
-    status = get_status()
-    st.session_state.status = status
-
-    # Jika ada flag shared dari PWA, sinkronisasi ke Supabase (mark_shared) lalu refresh
-    if has_shared_flag and status == "new":
-        from services.license import mark_shared
-        try:
-            mark_shared(get_device_id())
-        except Exception:
-            pass  # status di Supabase belum tersedia, lanjut cek
-        st.rerun()
-
-    # Gating (kriteria Langkah 7): state new / share_done / paywall menampilkan
-    # konten khusus dan menghentikan render panel umum.
-    if status in ("new", "share_done", "paywall"):
-        render_state_banner()
-        if status == "new":
-            import urllib.parse
-            share_text = "Coba Charvi O! https://charvi-o.streamlit.app"
-            wa_url = f"https://wa.me/?text={urllib.parse.quote(share_text)}"
-            if "share_clicked" not in st.session_state:
-                st.session_state.share_clicked = False
-            
-            if not st.session_state.share_clicked:
-                if st.button("📤 Bagikan ke WhatsApp", type="primary", use_container_width=True):
-                    st.session_state.share_clicked = True
-                    import streamlit.components.v1 as components
-                    components.html(f"<script>window.open('{wa_url}', '_blank');</script>", height=0)
-                    st.rerun()
-            else:
-                st.success("Terima kasih sudah berbagi! 🎉")
-                if st.button("✅ Saya Sudah Share & Klaim Trial", type="primary", use_container_width=True):
-                    try:
-                        mark_shared(get_device_id())
-                        st.success("Trial berhasil diaktifkan!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Gagal simpan ke Supabase: {e}")
-                        st.exception(e)
-        elif status == "share_done":
-            st.success("✅ Terima kasih sudah berbagi!")
-            st.info("Silakan isi profil singkat untuk memulai trial 24 jam.")
-            with st.form("profile_form"):
-                full_name = st.text_input("Nama Lengkap *")
-                whatsapp = st.text_input("Nomor WhatsApp (awali 62/852/853) *", placeholder="Contoh: 62812... / 852... / 853...")
-                email = st.text_input("Email (opsional)")
-                
-                submitted = st.form_submit_button("🎁 Klaim Trial 24 Jam", type="primary", use_container_width=True)
-                
-                if submitted:
-                    if not full_name or not whatsapp:
-                        st.error("Nama & WhatsApp wajib diisi.")
-                    else:
-                        from services.profile import save_profile
-                        save_profile(get_device_id(), {
-                            "full_name": full_name, 
-                            "whatsapp": whatsapp, 
-                            "email": email
-                        })
-                        
-                        from services.license import start_trial
-                        if start_trial(get_device_id()):
-                            st.rerun()
-                        else:
-                            st.error("Gagal memulai trial.")
-                            st.exception(Exception("Cek terminal Streamlit untuk detail error"))
-        elif status == "paywall" and st.session_state.get("order_id"):
-            render_payment_result()
+    # --- 1. GERBANG LOGIN GOOGLE ---
+    if not st.user.is_logged_in:
+        st.title("Selamat Datang di Charvi O")
+        st.write("Silakan login dengan akun Google Anda.")
+        if st.button("Login dengan Google", type="primary", use_container_width=True):
+            st.login("google")
         st.stop()
 
-    # trial: konten gratis (terjemah / belajar / kuis)
-    if status == "trial":
-        render_state_banner()
-        _render_free_tabs()
+    # --- 2. SETELAH LOGIN ---
+    user_email = st.user.email
+    device_id = user_email  # Gunakan email sebagai ID unik
+
+    # Cek status user di database
+    access = get_user_status(device_id)
+    status = access["status"]
+
+    # Jika user baru (belum pernah share/trial)
+    if status == "new":
+        st.title("Satu Langkah Lagi!")
+        st.write("Bagikan Charvi O ke teman Anda untuk mengaktifkan akses gratis 24 jam.")
+
+        # Tombol Share WA
+        share_text = "Coba Charvi O! Penerjemah Kantonis gratis."
+        wa_url = f"https://wa.me/?text={urllib.parse.quote(share_text)}"
+
+        if st.button("📤 Bagikan ke WhatsApp", type="primary", use_container_width=True):
+            mark_shared(device_id)
+            start_trial(device_id)  # Mulai hitungan 24 jam
+            st.rerun()  # Refresh halaman, status akan berubah jadi "trial"
         st.stop()
 
-    # active: semuanya
-    render_header()
-    with st.sidebar:
-        render_sidebar_profile()
-        st.divider()
-        if st.sidebar.button("🔄 Perpanjang Akses"):
-            show_extend_dialog()
-    _render_all_tabs()
+    # Jika sedang trial
+    elif status == "trial":
+        st.success("✅ Akses Trial 24 Jam Aktif!")
+        # Lanjut ke render UI utama (panggil _render_all_tabs())
+
+    # Jika trial habis (paywall)
+    elif status == "paywall":
+        st.warning("Masa trial Anda telah habis. Silakan pilih paket berbayar.")
+        render_payment_form()  # Panggil form paket yang sudah ada
+        st.stop()
+
+    # --- 3. RENDER APLIKASI UTAMA ---
+    # (Biarkan kode untuk memanggil tab, sidebar, dll di bawah sini)
 
 
 def _render_all_tabs() -> None:
