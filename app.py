@@ -515,14 +515,6 @@ def render_admin_page() -> None:
 # ============================================================
 def main():
     st.set_page_config(page_title="Charvi O", layout="wide")
-    # DEBUG: Cek konfigurasi auth
-    try:
-        auth_config = st.secrets.get("auth", {})
-        st.sidebar.write("=== AUTH DEBUG ===")
-        st.sidebar.write(f"redirect_uri: {auth_config.get('redirect_uri', 'TIDAK ADA')}")
-        st.sidebar.write(f"client_id: {auth_config.get('google', {}).get('client_id', 'TIDAK ADA')[:20]}...")
-    except Exception as e:
-        st.sidebar.write(f"AUTH ERROR: {e}")
 
     # --- 1. GERBANG LOGIN GOOGLE ---
     if not st.user.is_logged_in:
